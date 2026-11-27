@@ -39,8 +39,13 @@
                 <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                     <h2 class="text-lg font-bold text-slate-900 mb-3">สแกน Barcode เพื่อเพิ่มลงตะกร้าขาย</h2>
                     <form id="scan-form" class="flex gap-2">
-                        <input type="text" id="scan-barcode" autofocus placeholder="ยิงบาร์โค้ดสินค้า หรือพิมพ์เลขแล้วกด Enter..."
-                            class="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
+                        <div class="relative flex-1">
+                            <input type="text" id="scan-barcode" autocomplete="off" autofocus placeholder="ค้นหาชื่อสินค้า หรือยิงบาร์โค้ด..."
+                                role="combobox" aria-autocomplete="list" aria-controls="product-search-results" aria-expanded="false"
+                                class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
+                            <div id="product-search-results" role="listbox"
+                                class="absolute left-0 right-0 top-full z-20 mt-1 hidden max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"></div>
+                        </div>
                         <button type="submit" class="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-lg font-medium text-sm">
                             เพิ่มรายการ
                         </button>
@@ -90,11 +95,14 @@
         let cart = [];
         let sellableProducts = [];
         let checkoutInProgress = false;
+        const barcodeInput = document.getElementById('scan-barcode');
+        const productSearchResults = document.getElementById('product-search-results');
 
         async function renderProducts() {
             const grid = document.getElementById('product-grid');
             try {
                 sellableProducts = await InventoryAPI.getSellableProducts();
+                renderProductSearchResults();
                 if (sellableProducts.length === 0) {
                     grid.innerHTML = '<p class="col-span-2 text-center text-slate-400 py-6">ไม่มีสินค้าพร้อมขายในสต็อก</p>';
                     clearAppError();
@@ -126,6 +134,47 @@
                 showAppError(error.message);
                 grid.textContent = 'โหลดรายการสินค้าพร้อมขายไม่สำเร็จ';
             }
+        }
+
+        function hideProductSearchResults() {
+            productSearchResults.classList.add('hidden');
+            barcodeInput.setAttribute('aria-expanded', 'false');
+        }
+
+        function renderProductSearchResults() {
+            const query = barcodeInput.value.trim().toLowerCase();
+            productSearchResults.innerHTML = '';
+            if (!query) {
+                hideProductSearchResults();
+                return;
+            }
+
+            const matches = sellableProducts
+                .filter(product => product.name.toLowerCase().includes(query) || product.barcode.toLowerCase().includes(query))
+                .slice(0, 10);
+            if (matches.length === 0) {
+                hideProductSearchResults();
+                return;
+            }
+
+            productSearchResults.innerHTML = matches.map(product => `
+                <button type="button" role="option" data-product-barcode="${escapeHtml(product.barcode)}"
+                    class="block w-full border-b border-slate-200 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50">
+                    <span class="block font-medium text-slate-900">${escapeHtml(product.name)}</span>
+                    <span class="block text-xs text-slate-500">Barcode: ${escapeHtml(product.barcode)} · พร้อมขาย ${product.availableQty} ชิ้น</span>
+                </button>
+            `).join('');
+            productSearchResults.classList.remove('hidden');
+            barcodeInput.setAttribute('aria-expanded', 'true');
+
+            productSearchResults.querySelectorAll('[data-product-barcode]').forEach(button => {
+                button.addEventListener('click', () => {
+                    addToCart(button.dataset.productBarcode);
+                    barcodeInput.value = '';
+                    hideProductSearchResults();
+                    barcodeInput.focus();
+                });
+            });
         }
 
         function addToCart(barcode) {
@@ -243,14 +292,34 @@
 
         document.getElementById('scan-form').addEventListener('submit', (event) => {
             event.preventDefault();
-            const input = document.getElementById('scan-barcode');
-            const barcode = input.value.trim();
+            const barcode = barcodeInput.value.trim();
             if (barcode) {
                 addToCart(barcode);
-                input.value = '';
+                barcodeInput.value = '';
+                hideProductSearchResults();
             }
         });
 
+        barcodeInput.addEventListener('input', renderProductSearchResults);
+        barcodeInput.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                hideProductSearchResults();
+                return;
+            }
+
+            if (event.key === 'ArrowDown' || event.key === 'Enter') {
+                const firstResult = productSearchResults.querySelector('[data-product-barcode]');
+                if (!firstResult) return;
+                event.preventDefault();
+                if (event.key === 'ArrowDown') firstResult.focus();
+                else firstResult.click();
+            }
+        });
+        document.addEventListener('click', event => {
+            if (!productSearchResults.contains(event.target) && event.target !== barcodeInput) {
+                hideProductSearchResults();
+            }
+        });
         document.addEventListener('DOMContentLoaded', () => {
             renderCart();
             renderProducts();
