@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ภาพรวมสต็อก & แจ้งเตือนวันหมดอายุ - StockLot FEFO</title>
+    <link href="/asset/css/output.css" rel="stylesheet">
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-2">
+                    <span class="bg-indigo-600 text-white font-bold px-2.5 py-1 rounded-lg text-sm">FEFO</span>
+                    <span class="font-bold text-lg text-slate-900">ระบบจัดการ Lot & วันหมดอายุ</span>
+                </div>
+                <div class="flex space-x-2 sm:space-x-4 text-sm font-medium">
+                    <a href="index.html" class="bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg">ภาพรวม & แจ้งเตือน</a>
+                    <a href="receive.html" class="text-slate-600 hover:bg-slate-100 px-3 py-2 rounded-lg">รับเข้า Lot สินค้า</a>
+                    <a href="pos.html" class="text-slate-600 hover:bg-slate-100 px-3 py-2 rounded-lg">จำลองการขาย (POS)</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+        <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900">ภาพรวมสต็อกและการแจ้งเตือนวันหมดอายุ</h1>
+                <p class="text-sm text-slate-500 mt-1">ระบบเรียงลำดับความสำคัญตามวันที่ใกล้หมดอายุที่สุด (First Expired, First Out)</p>
+            </div>
+            <a href="receive.html" class="inline-flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2 rounded-lg text-sm transition">
+                + บันทึกรับ Lot สินค้าใหม่
+            </a>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <p class="text-sm text-slate-500 font-medium">จำนวน Lot ที่ยังมีสินค้า</p>
+                <p id="stat-active-lots" class="text-3xl font-bold text-slate-900 mt-2">0</p>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <p class="text-sm text-slate-500 font-medium">สินค้าพร้อมขายรวม (ชิ้น)</p>
+                <p id="stat-sellable-qty" class="text-3xl font-bold text-emerald-600 mt-2">0</p>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-amber-200 bg-amber-50/30 shadow-sm">
+                <p class="text-sm text-amber-800 font-medium">ใกล้หมดอายุ (≤ 30 วัน)</p>
+                <p id="stat-near-expiry" class="text-3xl font-bold text-amber-600 mt-2">0</p>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-red-200 bg-red-50/30 shadow-sm">
+                <p class="text-sm text-red-800 font-medium">หมดอายุแล้ว (ระงับขาย)</p>
+                <p id="stat-expired" class="text-3xl font-bold text-red-600 mt-2">0</p>
+            </div>
+        </div>
+
+        <!-- Expiry Alert Table -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
+            <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                <h2 class="font-bold text-slate-900">รายการเฝ้าระวังวันหมดอายุ (เรียงจากหมดอายุเร็วสุด)</h2>
+                <span class="text-xs text-slate-500">* ล็อตที่หมดอายุแล้วจะไม่ถูกนำไปตัดสต็อกในหน้าขายและ API</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+                            <th class="py-3 px-4">สถานะ</th>
+                            <th class="py-3 px-4">วันหมดอายุ (EXP)</th>
+                            <th class="py-3 px-4">Barcode</th>
+                            <th class="py-3 px-4">ชื่อสินค้า</th>
+                            <th class="py-3 px-4">วันที่รับเข้า</th>
+                            <th class="py-3 px-4 text-right">คงเหลือ (ลัง / ชิ้น)</th>
+                            <th class="py-3 px-4 text-right">คงเหลือสุทธิ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="alert-table-body" class="divide-y divide-slate-200 text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recent Deduction Logs -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-200">
+                <h2 class="font-bold text-slate-900">ประวัติการตัดสต็อกล่าสุด (จากหน้าขาย & API)</h2>
+            </div>
+            <div id="recent-logs" class="p-6 space-y-3 text-sm text-slate-600"></div>
+        </div>
+    </main>
+
+    <script src="/asset/js/app.js"></script>
+    <script>
+        async function renderDashboard() {
+            const tbody = document.getElementById('alert-table-body');
+            const logsContainer = document.getElementById('recent-logs');
+
+            try {
+                const lots = (await InventoryAPI.getLots())
+                    .filter(lot => lot.remainingQty > 0)
+                    .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+
+                let sellableQty = 0;
+                let nearExpiryCount = 0;
+                let expiredCount = 0;
+                tbody.innerHTML = '';
+
+                if (lots.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-slate-400">ไม่มีสินค้าคงเหลือในระบบ</td></tr>';
+                }
+
+                lots.forEach(lot => {
+                    const status = getExpiryStatus(lot.expiryDate);
+                    if (status.code === 'EXPIRED') {
+                        expiredCount++;
+                    } else {
+                        sellableQty += lot.remainingQty;
+                        if (status.code === 'NEAR_EXPIRY') nearExpiryCount++;
+                    }
+
+                    const tr = document.createElement('tr');
+                    tr.className = status.code === 'EXPIRED' ? 'bg-red-50/40' : 'hover:bg-slate-50';
+                    tr.innerHTML = `
+                        <td class="py-3 px-4 whitespace-nowrap">
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium ${status.badgeClass}">${escapeHtml(status.label)}</span>
+                        </td>
+                        <td class="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap">${escapeHtml(lot.expiryDate)}</td>
+                        <td class="py-3 px-4 font-mono text-xs text-slate-600">${escapeHtml(lot.barcode)}</td>
+                        <td class="py-3 px-4 font-medium text-slate-900">${escapeHtml(lot.name)}</td>
+                        <td class="py-3 px-4 text-slate-500 whitespace-nowrap">${escapeHtml(lot.receiveDate)}</td>
+                        <td class="py-3 px-4 text-right text-slate-600 whitespace-nowrap">${escapeHtml(formatBoxAndPieces(lot.remainingQty, lot.itemsPerBox))} <span class="text-xs text-slate-400">(${lot.itemsPerBox}/ลัง)</span></td>
+                        <td class="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap">${lot.remainingQty} ชิ้น</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                document.getElementById('stat-active-lots').textContent = lots.length;
+                document.getElementById('stat-sellable-qty').textContent = sellableQty.toLocaleString();
+                document.getElementById('stat-near-expiry').textContent = nearExpiryCount;
+                document.getElementById('stat-expired').textContent = expiredCount;
+
+                const logs = await InventoryAPI.getLogs();
+                if (logs.length === 0) {
+                    logsContainer.innerHTML = '<p class="text-slate-400 text-center py-4">ยังไม่มีประวัติการตัดสต็อก</p>';
+                } else {
+                    logsContainer.innerHTML = logs.map(log => `
+                        <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 flex flex-col sm:flex-row sm:justify-between gap-2">
+                            <div>
+                                <span class="font-semibold text-slate-900">[${escapeHtml(log.source)}] Order: ${escapeHtml(log.order_id)}</span>
+                                <div class="text-xs text-slate-600 mt-1">
+                                    ${log.details.map(detail => `• ${escapeHtml(detail.product_name)} ตัดจาก Lot หมดอายุ <b>${escapeHtml(detail.expiry_date)}</b> จำนวน <b>${detail.deducted_qty} ชิ้น</b> (เหลือ ${detail.remaining_in_lot})`).join('<br>')}
+                                </div>
+                            </div>
+                            <div class="text-xs text-slate-400 whitespace-nowrap">${escapeHtml(log.timestamp)}</div>
+                        </div>
+                    `).join('');
+                }
+                clearAppError();
+            } catch (error) {
+                showAppError(error.message);
+                logsContainer.textContent = 'โหลดประวัติการตัดสต็อกไม่สำเร็จ';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', renderDashboard);
+    </script>
+</body>
+</html>

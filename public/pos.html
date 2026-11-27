@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>จำลองการขาย (POS) - StockLot FEFO</title>
+    <link href="/asset/css/output.css" rel="stylesheet">
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-2">
+                    <span class="bg-indigo-600 text-white font-bold px-2.5 py-1 rounded-lg text-sm">FEFO</span>
+                    <span class="font-bold text-lg text-slate-900">ระบบจัดการ Lot & วันหมดอายุ</span>
+                </div>
+                <div class="flex space-x-2 sm:space-x-4 text-sm font-medium">
+                    <a href="index.html" class="text-slate-600 hover:bg-slate-100 px-3 py-2 rounded-lg">ภาพรวม & แจ้งเตือน</a>
+                    <a href="receive.html" class="text-slate-600 hover:bg-slate-100 px-3 py-2 rounded-lg">รับเข้า Lot สินค้า</a>
+                    <a href="pos.html" class="bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg">จำลองการขาย (POS)</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+            <!-- ฝั่งซ้าย: สแกนบาร์โค้ด & รายการสินค้าพร้อมขาย -->
+            <div class="lg:col-span-2 space-y-6">
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <h2 class="text-lg font-bold text-slate-900 mb-3">สแกน Barcode เพื่อเพิ่มลงตะกร้าขาย</h2>
+                    <form id="scan-form" class="flex gap-2">
+                        <input type="text" id="scan-barcode" autofocus placeholder="ยิงบาร์โค้ดสินค้า หรือพิมพ์เลขแล้วกด Enter..."
+                            class="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
+                        <button type="submit" class="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-lg font-medium text-sm">
+                            เพิ่มรายการ
+                        </button>
+                    </form>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-900 mb-4">เลือกสินค้าที่มีสต็อกพร้อมขาย (ไม่รวมล็อตที่หมดอายุ)</h3>
+                    <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+                </div>
+            </div>
+
+            <!-- ฝั่งขวา: ตะกร้าขาย & ผลลัพธ์การตัดสต็อก -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-bold text-slate-900">รายการขายปัจจุบัน</h2>
+                        <button onclick="clearCart()" class="text-xs text-red-600 hover:underline">ล้างตะกร้า</button>
+                    </div>
+
+                    <div id="cart-items" class="divide-y divide-slate-200 min-h-[160px]"></div>
+
+                    <div class="border-t border-slate-200 pt-4 mt-4">
+                        <div class="flex justify-between text-sm font-medium text-slate-700 mb-4">
+                            <span>จำนวนชิ้นรวม:</span>
+                            <span id="cart-total-qty" class="font-bold text-lg text-slate-900">0 ชิ้น</span>
+                        </div>
+                        <button onclick="checkout()" id="checkout-btn"
+                            class="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold py-3 px-4 rounded-lg transition">
+                            ยืนยันการขาย & ส่งคำสั่งตัดสต็อก API
+                        </button>
+                    </div>
+                </div>
+
+                <!-- แสดงผลลัพธ์การตัดสต็อก FEFO -->
+                <div id="pos-result-box" class="hidden bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-sm text-slate-900 mb-2">ผลลัพธ์การตัดสต็อก (FEFO Log)</h3>
+                    <div id="pos-result-content" class="text-xs space-y-2"></div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script src="/asset/js/app.js"></script>
+    <script>
+        let cart = [];
+        let sellableProducts = [];
+        let checkoutInProgress = false;
+
+        async function renderProducts() {
+            const grid = document.getElementById('product-grid');
+            try {
+                sellableProducts = await InventoryAPI.getSellableProducts();
+                if (sellableProducts.length === 0) {
+                    grid.innerHTML = '<p class="col-span-2 text-center text-slate-400 py-6">ไม่มีสินค้าพร้อมขายในสต็อก</p>';
+                    clearAppError();
+                    return;
+                }
+
+                grid.innerHTML = sellableProducts.map(product => `
+                    <div class="border border-slate-200 rounded-lg p-4 hover:border-indigo-400 transition flex flex-col justify-between">
+                        <div>
+                            <div class="font-mono text-xs text-slate-400">${escapeHtml(product.barcode)}</div>
+                            <div class="font-bold text-slate-900 mt-0.5">${escapeHtml(product.name)}</div>
+                            <div class="text-xs text-slate-500 mt-2">
+                                พร้อมขาย: <span class="font-bold text-emerald-600">${product.availableQty} ชิ้น</span><br>
+                                Lot หมดอายุเร็วสุด: <span class="font-medium text-amber-700">${escapeHtml(product.nearestExpiry)}</span>
+                            </div>
+                        </div>
+                        <button data-add-barcode="${escapeHtml(product.barcode)}"
+                            class="mt-3 w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold py-1.5 px-3 rounded text-xs transition">
+                            + เพิ่มลงตะกร้า (1 ชิ้น)
+                        </button>
+                    </div>
+                `).join('');
+
+                grid.querySelectorAll('[data-add-barcode]').forEach(button => {
+                    button.addEventListener('click', () => addToCart(button.dataset.addBarcode));
+                });
+                clearAppError();
+            } catch (error) {
+                showAppError(error.message);
+                grid.textContent = 'โหลดรายการสินค้าพร้อมขายไม่สำเร็จ';
+            }
+        }
+
+        function addToCart(barcode) {
+            const product = sellableProducts.find(item => item.barcode === barcode);
+            if (!product) {
+                showAppError('ไม่พบสินค้านี้ หรือสินค้าอาจหมดอายุ/หมดสต็อกแล้ว');
+                return;
+            }
+
+            const existing = cart.find(item => item.barcode === barcode);
+            if (existing) {
+                if (existing.qty + 1 > product.availableQty) {
+                    showAppError(`สินค้า "${product.name}" มีพร้อมขายสูงสุด ${product.availableQty} ชิ้น`);
+                    return;
+                }
+                existing.qty += 1;
+            } else {
+                cart.push({ barcode: product.barcode, name: product.name, qty: 1 });
+            }
+            clearAppError();
+            renderCart();
+        }
+
+        function updateCartQty(barcode, delta) {
+            const item = cart.find(entry => entry.barcode === barcode);
+            if (!item) return;
+            const product = sellableProducts.find(entry => entry.barcode === barcode);
+            const newQty = item.qty + delta;
+
+            if (newQty <= 0) {
+                cart = cart.filter(entry => entry.barcode !== barcode);
+            } else if (product && newQty <= product.availableQty) {
+                item.qty = newQty;
+            } else {
+                showAppError('จำนวนสินค้าในตะกร้าเกินสต็อกที่พร้อมขาย');
+            }
+            renderCart();
+        }
+
+        function clearCart() {
+            cart = [];
+            renderCart();
+        }
+
+        function renderCart() {
+            const container = document.getElementById('cart-items');
+            const totalQtyEl = document.getElementById('cart-total-qty');
+            const checkoutBtn = document.getElementById('checkout-btn');
+            checkoutBtn.disabled = cart.length === 0 || checkoutInProgress;
+
+            if (cart.length === 0) {
+                container.innerHTML = '<p class="text-sm text-slate-400 text-center py-10">ยังไม่มีสินค้าในตะกร้า</p>';
+                totalQtyEl.textContent = '0 ชิ้น';
+                return;
+            }
+
+            const total = cart.reduce((sum, item) => sum + item.qty, 0);
+            container.innerHTML = cart.map(item => `
+                <div class="py-3 flex justify-between items-center gap-2">
+                    <div>
+                        <div class="font-medium text-sm text-slate-900">${escapeHtml(item.name)}</div>
+                        <div class="font-mono text-xs text-slate-400">${escapeHtml(item.barcode)}</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button data-cart-barcode="${escapeHtml(item.barcode)}" data-cart-delta="-1" class="w-7 h-7 rounded bg-slate-100 hover:bg-slate-200 font-bold">-</button>
+                        <span class="w-6 text-center font-bold text-sm">${item.qty}</span>
+                        <button data-cart-barcode="${escapeHtml(item.barcode)}" data-cart-delta="1" class="w-7 h-7 rounded bg-slate-100 hover:bg-slate-200 font-bold">+</button>
+                    </div>
+                </div>
+            `).join('');
+
+            container.querySelectorAll('[data-cart-barcode]').forEach(button => {
+                button.addEventListener('click', () => {
+                    updateCartQty(button.dataset.cartBarcode, Number(button.dataset.cartDelta));
+                });
+            });
+            totalQtyEl.textContent = `${total} ชิ้น`;
+        }
+
+        async function checkout() {
+            if (cart.length === 0 || checkoutInProgress) return;
+
+            checkoutInProgress = true;
+            renderCart();
+            const resultBox = document.getElementById('pos-result-box');
+            const resultContent = document.getElementById('pos-result-content');
+            resultBox.classList.remove('hidden');
+
+            try {
+                const result = await InventoryAPI.deductStock({
+                    order_id: `POS-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                    source: 'POS Simulator',
+                    items: cart.map(item => ({ barcode: item.barcode, qty: item.qty })),
+                });
+
+                resultContent.innerHTML = `
+                    <div class="p-3 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200">
+                        <div class="font-bold">✓ ${escapeHtml(result.message)} (${escapeHtml(result.order_id)})</div>
+                        <ul class="mt-2 space-y-1 list-disc list-inside">
+                            ${result.deducted_lots.map(lot => `<li>${escapeHtml(lot.product_name)}: ตัดจาก Lot EXP <b>${escapeHtml(lot.expiry_date)}</b> (-${lot.deducted_qty} ชิ้น)</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+                cart = [];
+                clearAppError();
+                await renderProducts();
+            } catch (error) {
+                showAppError(error.message);
+                resultContent.innerHTML = `<div class="p-3 bg-red-50 text-red-700 rounded-lg border border-red-200 font-medium">${escapeHtml(error.message)}</div>`;
+            } finally {
+                checkoutInProgress = false;
+                renderCart();
+            }
+        }
+
+        document.getElementById('scan-form').addEventListener('submit', (event) => {
+            event.preventDefault();
+            const input = document.getElementById('scan-barcode');
+            const barcode = input.value.trim();
+            if (barcode) {
+                addToCart(barcode);
+                input.value = '';
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderCart();
+            renderProducts();
+        });
+    </script>
+</body>
+</html>
