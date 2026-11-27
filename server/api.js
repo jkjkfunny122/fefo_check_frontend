@@ -2,6 +2,7 @@ const express = require('express');
 const { getPool, withTransaction } = require('./database');
 
 const router = express.Router();
+const MAX_SEARCH_PAGE_SIZE = 10;
 
 class ApiError extends Error {
     constructor(status, message) {
@@ -23,6 +24,42 @@ function requirePositiveInteger(value, field) {
         throw new ApiError(400, `${field} ต้องเป็นจำนวนเต็มมากกว่า 0`);
     }
     return parsed;
+}
+
+function getSearchPagination(query) {
+    const rawSearch = query.search === undefined ? '' : query.search;
+    if (typeof rawSearch !== 'string' || rawSearch.length > 255) {
+        throw new ApiError(400, 'search ต้องเป็นข้อความไม่เกิน 255 ตัวอักษร');
+    }
+
+    const rawPage = query.page === undefined ? '1' : query.page;
+    const rawLimit = query.limit === undefined ? String(MAX_SEARCH_PAGE_SIZE) : query.limit;
+    if (typeof rawPage !== 'string' || typeof rawLimit !== 'string') {
+        throw new ApiError(400, 'page และ limit ต้องเป็นจำนวนเต็มบวก');
+    }
+
+    const page = requirePositiveInteger(rawPage, 'page');
+    const limit = Math.min(requirePositiveInteger(rawLimit, 'limit'), MAX_SEARCH_PAGE_SIZE);
+    const offset = (page - 1) * limit;
+    if (!Number.isSafeInteger(offset)) {
+        throw new ApiError(400, 'page เกินขอบเขตที่ระบบรองรับ');
+    }
+
+    const search = rawSearch.trim();
+    const pattern = `%${search.replace(/[!%_]/g, '!$&')}%`;
+    return { search, pattern, page, limit, offset };
+}
+
+function toPagination(page, limit, total) {
+    const totalPages = Math.ceil(total / limit);
+    return {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasPreviousPage: page > 1,
+        hasNextPage: page < totalPages,
+    };
 }
 
 function requireDate(value, field) {
@@ -75,6 +112,37 @@ router.get('/lots', async (request, response) => {
     response.json(rows.map(toLotDto));
 });
 
+router.get('/lots/search', async (request, response) => {
+    const { search, pattern, page, limit, offset } = getSearchPagination(request.query);
+    const searchCondition = `
+        (? = '' OR p.product_name LIKE ? ESCAPE '!' OR p.barcode LIKE ? ESCAPE '!')
+    `;
+    const pool = getPool();
+    const [[countRows], [rows]] = await Promise.all([
+        pool.execute(`
+            SELECT COUNT(*) AS total
+            FROM stock_lots AS l
+            INNER JOIN products AS p ON p.product_id = l.product_id
+            WHERE ${searchCondition}
+        `, [search, pattern, pattern]),
+        pool.execute(`
+            SELECT l.lot_id, p.barcode, p.product_name, l.receive_date, l.expiry_date,
+                   l.boxes, l.items_per_box, l.received_qty, l.remaining_qty
+            FROM stock_lots AS l
+            INNER JOIN products AS p ON p.product_id = l.product_id
+            WHERE ${searchCondition}
+            ORDER BY l.receive_date DESC, l.lot_id DESC
+            LIMIT ? OFFSET ?
+        `, [search, pattern, pattern, limit, offset]),
+    ]);
+
+    const total = toSafeNumber(countRows[0].total, 'total');
+    response.json({
+        items: rows.map(toLotDto),
+        pagination: toPagination(page, limit, total),
+    });
+});
+
 router.get('/products/lookup/:barcode', async (request, response) => {
     const barcode = requireText(request.params.barcode, 'Barcode', 64);
     const [rows] = await getPool().execute(`
@@ -93,6 +161,43 @@ router.get('/products/lookup/:barcode', async (request, response) => {
         barcode: rows[0].barcode,
         name: rows[0].product_name,
         itemsPerBox: toSafeNumber(rows[0].items_per_box, 'items_per_box'),
+    });
+});
+
+router.get('/products/search', async (request, response) => {
+    const { search, pattern, page, limit, offset } = getSearchPagination(request.query);
+    if (!search) {
+        throw new ApiError(400, 'กรุณาระบุคำค้นหาชื่อสินค้าหรือ Barcode');
+    }
+
+    const pool = getPool();
+    const searchCondition = `
+        is_active = TRUE
+        AND (product_name LIKE ? ESCAPE '!' OR barcode LIKE ? ESCAPE '!')
+    `;
+    const [[countRows], [rows]] = await Promise.all([
+        pool.execute(`
+            SELECT COUNT(*) AS total
+            FROM products
+            WHERE ${searchCondition}
+        `, [pattern, pattern]),
+        pool.execute(`
+            SELECT barcode, product_name, items_per_box
+            FROM products
+            WHERE ${searchCondition}
+            ORDER BY product_name, barcode
+            LIMIT ? OFFSET ?
+        `, [pattern, pattern, limit, offset]),
+    ]);
+
+    const total = toSafeNumber(countRows[0].total, 'total');
+    response.json({
+        items: rows.map((row) => ({
+            barcode: row.barcode,
+            name: row.product_name,
+            itemsPerBox: toSafeNumber(row.items_per_box, 'items_per_box'),
+        })),
+        pagination: toPagination(page, limit, total),
     });
 });
 
@@ -196,6 +301,49 @@ router.get('/sellable-products', async (request, response) => {
         availableQty: toSafeNumber(row.available_qty, 'available_qty'),
         nearestExpiry: row.nearest_expiry,
     })));
+});
+
+router.get('/sellable-products/search', async (request, response) => {
+    const { search, pattern, page, limit, offset } = getSearchPagination(request.query);
+    const searchCondition = `
+        (? = '' OR p.product_name LIKE ? ESCAPE '!' OR p.barcode LIKE ? ESCAPE '!')
+    `;
+    const sellableCondition = `
+        p.is_active = TRUE
+        AND l.remaining_qty > 0
+        AND l.expiry_date >= CURRENT_DATE
+        AND ${searchCondition}
+    `;
+    const pool = getPool();
+    const [[countRows], [rows]] = await Promise.all([
+        pool.execute(`
+            SELECT COUNT(DISTINCT p.product_id) AS total
+            FROM products AS p
+            INNER JOIN stock_lots AS l ON l.product_id = p.product_id
+            WHERE ${sellableCondition}
+        `, [search, pattern, pattern]),
+        pool.execute(`
+            SELECT p.barcode, p.product_name, SUM(l.remaining_qty) AS available_qty,
+                   MIN(l.expiry_date) AS nearest_expiry
+            FROM products AS p
+            INNER JOIN stock_lots AS l ON l.product_id = p.product_id
+            WHERE ${sellableCondition}
+            GROUP BY p.product_id, p.barcode, p.product_name
+            ORDER BY p.product_name, p.barcode
+            LIMIT ? OFFSET ?
+        `, [search, pattern, pattern, limit, offset]),
+    ]);
+
+    const total = toSafeNumber(countRows[0].total, 'total');
+    response.json({
+        items: rows.map((row) => ({
+            barcode: row.barcode,
+            name: row.product_name,
+            availableQty: toSafeNumber(row.available_qty, 'available_qty'),
+            nearestExpiry: row.nearest_expiry,
+        })),
+        pagination: toPagination(page, limit, total),
+    });
 });
 
 router.get('/logs', async (request, response) => {

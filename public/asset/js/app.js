@@ -106,6 +106,9 @@ window.InventoryAPI = {
     getLogs: () => requestApi('/api/logs'),
     getSellableProducts: () => requestApi('/api/sellable-products'),
     lookupProduct: (barcode) => requestApi(`/api/products/lookup/${encodeURIComponent(barcode)}`),
+    searchProducts: (search, page = 1, limit = 10) => requestApi(
+        `/api/products/search?search=${encodeURIComponent(search)}&page=${encodeURIComponent(page)}&limit=${encodeURIComponent(limit)}`,
+    ),
     addNewLot: (lot) => requestApi('/api/lots', jsonOptions('POST', lot)),
     deleteLot: (id) => requestApi(`/api/lots/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     deductStock: (sale) => requestApi('/api/sales', jsonOptions('POST', sale)),

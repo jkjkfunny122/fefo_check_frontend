@@ -92,13 +92,18 @@
 
             <!-- ตารางรายการ Lot ทั้งหมด -->
             <div class="lg:col-span-2">
-                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
                     <div class="px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <h2 class="font-bold text-slate-900">ประวัติการรับเข้า Lot สินค้าทั้งหมด</h2>
-                        <input type="text" id="search-input" placeholder="ค้นหาชื่อสินค้า หรือ Barcode..."
-                            class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <div class="relative w-full sm:w-72">
+                            <input type="text" id="search-input" placeholder="ค้นหาชื่อสินค้า หรือ Barcode..." autocomplete="off"
+                                role="combobox" aria-autocomplete="list" aria-controls="lot-search-results" aria-expanded="false"
+                                class="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <div id="lot-search-results" role="listbox"
+                                class="absolute left-0 right-0 top-full z-20 mt-1 hidden max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"></div>
+                        </div>
                     </div>
-                    <div class="overflow-x-auto">
+                    <div class="overflow-x-auto rounded-b-xl">
                         <table class="w-full text-left border-collapse">
                             <thead>
                                 <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
@@ -128,6 +133,10 @@
         const itemsPerBoxInput = document.getElementById('itemsPerBox');
         const totalPreview = document.getElementById('total-preview');
         const receiveForm = document.getElementById('receive-form');
+        const searchInput = document.getElementById('search-input');
+        const searchResults = document.getElementById('lot-search-results');
+        let allLots = [];
+        let lotsLoaded = false;
 
         receiveDateInput.value = localDateString();
 
@@ -177,7 +186,7 @@
                 updateTotalPreview();
                 barcodeInput.focus();
                 clearAppError();
-                await renderLotsTable();
+                await loadLots();
             } catch (error) {
                 showAppError(error.message);
             } finally {
@@ -185,73 +194,149 @@
             }
         });
 
-        async function renderLotsTable() {
-            const keyword = document.getElementById('search-input').value.trim().toLowerCase();
+        function matchingLots(keyword) {
+            const query = keyword.trim().toLowerCase();
+            return allLots
+                .filter(lot => lot.name.toLowerCase().includes(query) || lot.barcode.toLowerCase().includes(query))
+                .sort((a, b) => new Date(b.receiveDate) - new Date(a.receiveDate));
+        }
+
+        function hideSearchResults() {
+            searchResults.classList.add('hidden');
+            searchInput.setAttribute('aria-expanded', 'false');
+        }
+
+        function renderSearchResults() {
+            const keyword = searchInput.value.trim();
+            searchResults.innerHTML = '';
+            if (!lotsLoaded || !keyword) {
+                hideSearchResults();
+                return;
+            }
+
+            const matches = matchingLots(keyword).slice(0, 10);
+            if (matches.length === 0) {
+                hideSearchResults();
+                return;
+            }
+
+            searchResults.innerHTML = matches.map(lot => `
+                <button type="button" role="option" data-search-barcode="${escapeHtml(lot.barcode)}"
+                    class="block w-full border-b border-slate-200 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50">
+                    <span class="block font-medium text-slate-900">${escapeHtml(lot.name)}</span>
+                    <span class="block text-xs text-slate-500">Barcode: ${escapeHtml(lot.barcode)} · EXP: ${escapeHtml(lot.expiryDate)}</span>
+                </button>
+            `).join('');
+            searchResults.classList.remove('hidden');
+            searchInput.setAttribute('aria-expanded', 'true');
+
+            searchResults.querySelectorAll('[data-search-barcode]').forEach(button => {
+                button.addEventListener('click', () => {
+                    searchInput.value = button.dataset.searchBarcode;
+                    hideSearchResults();
+                    renderLotsTable();
+                    searchInput.focus();
+                });
+            });
+        }
+
+        function renderLotsTable() {
+            const keyword = searchInput.value.trim().toLowerCase();
             const tbody = document.getElementById('lots-table-body');
+            if (!lotsLoaded) return;
 
-            try {
-                const lots = (await InventoryAPI.getLots())
-                    .filter(lot => lot.name.toLowerCase().includes(keyword) || lot.barcode.toLowerCase().includes(keyword))
-                    .sort((a, b) => new Date(b.receiveDate) - new Date(a.receiveDate));
+            const lots = matchingLots(keyword);
 
-                tbody.innerHTML = '';
-                if (lots.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-slate-400">ไม่พบข้อมูล Lot สินค้า</td></tr>';
-                    clearAppError();
-                    return;
-                }
-
-                lots.forEach(lot => {
-                    const status = getExpiryStatus(lot.expiryDate);
-                    const tr = document.createElement('tr');
-                    tr.className = 'hover:bg-slate-50';
-                    tr.innerHTML = `
-                        <td class="py-3 px-4">
-                            <div class="font-medium text-slate-900">${escapeHtml(lot.name)}</div>
-                            <div class="font-mono text-xs text-slate-500">${escapeHtml(lot.barcode)}</div>
-                        </td>
-                        <td class="py-3 px-4 text-slate-600 whitespace-nowrap">${escapeHtml(lot.receiveDate)}</td>
-                        <td class="py-3 px-4 whitespace-nowrap">
-                            <div class="font-semibold text-slate-900">${escapeHtml(lot.expiryDate)}</div>
-                            <span class="inline-block mt-0.5 px-2 py-0.5 rounded text-[11px] font-medium ${status.badgeClass}">${escapeHtml(status.label)}</span>
-                        </td>
-                        <td class="py-3 px-4 text-right text-slate-600 whitespace-nowrap">
-                            ${lot.boxes} ลัง × ${lot.itemsPerBox} = <b>${lot.totalQty}</b>
-                        </td>
-                        <td class="py-3 px-4 text-right whitespace-nowrap">
-                            <div class="font-bold ${lot.remainingQty === 0 ? 'text-slate-400' : 'text-indigo-700'}">${lot.remainingQty} ชิ้น</div>
-                            <div class="text-xs text-slate-500">(${escapeHtml(formatBoxAndPieces(lot.remainingQty, lot.itemsPerBox))})</div>
-                        </td>
-                        <td class="py-3 px-4 text-center">
-                            <button data-delete-lot="${lot.id}" class="text-xs text-red-600 hover:underline">ลบ</button>
-                        </td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-
-                tbody.querySelectorAll('[data-delete-lot]').forEach(button => {
-                    button.addEventListener('click', async () => {
-                        if (!confirm('ยืนยันการลบข้อมูล Lot นี้?')) return;
-                        button.disabled = true;
-                        try {
-                            await InventoryAPI.deleteLot(button.dataset.deleteLot);
-                            clearAppError();
-                            await renderLotsTable();
-                        } catch (error) {
-                            showAppError(error.message);
-                            button.disabled = false;
-                        }
-                    });
-                });
+            tbody.innerHTML = '';
+            if (lots.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-slate-400">ไม่พบข้อมูล Lot สินค้า</td></tr>';
                 clearAppError();
+                return;
+            }
+
+            lots.forEach(lot => {
+                const status = getExpiryStatus(lot.expiryDate);
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50';
+                tr.innerHTML = `
+                    <td class="py-3 px-4">
+                        <div class="font-medium text-slate-900">${escapeHtml(lot.name)}</div>
+                        <div class="font-mono text-xs text-slate-500">${escapeHtml(lot.barcode)}</div>
+                    </td>
+                    <td class="py-3 px-4 text-slate-600 whitespace-nowrap">${escapeHtml(lot.receiveDate)}</td>
+                    <td class="py-3 px-4 whitespace-nowrap">
+                        <div class="font-semibold text-slate-900">${escapeHtml(lot.expiryDate)}</div>
+                        <span class="inline-block mt-0.5 px-2 py-0.5 rounded text-[11px] font-medium ${status.badgeClass}">${escapeHtml(status.label)}</span>
+                    </td>
+                    <td class="py-3 px-4 text-right text-slate-600 whitespace-nowrap">
+                        ${lot.boxes} ลัง × ${lot.itemsPerBox} = <b>${lot.totalQty}</b>
+                    </td>
+                    <td class="py-3 px-4 text-right whitespace-nowrap">
+                        <div class="font-bold ${lot.remainingQty === 0 ? 'text-slate-400' : 'text-indigo-700'}">${lot.remainingQty} ชิ้น</div>
+                        <div class="text-xs text-slate-500">(${escapeHtml(formatBoxAndPieces(lot.remainingQty, lot.itemsPerBox))})</div>
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                        <button data-delete-lot="${lot.id}" class="text-xs text-red-600 hover:underline">ลบ</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            tbody.querySelectorAll('[data-delete-lot]').forEach(button => {
+                button.addEventListener('click', async () => {
+                    if (!confirm('ยืนยันการลบข้อมูล Lot นี้?')) return;
+                    button.disabled = true;
+                    try {
+                        await InventoryAPI.deleteLot(button.dataset.deleteLot);
+                        clearAppError();
+                        await loadLots();
+                    } catch (error) {
+                        showAppError(error.message);
+                        button.disabled = false;
+                    }
+                });
+            });
+            clearAppError();
+        }
+
+        async function loadLots() {
+            const tbody = document.getElementById('lots-table-body');
+            lotsLoaded = false;
+            try {
+                allLots = await InventoryAPI.getLots();
+                lotsLoaded = true;
+                renderLotsTable();
+                renderSearchResults();
             } catch (error) {
                 showAppError(error.message);
                 tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-red-600">โหลดข้อมูลไม่สำเร็จ</td></tr>';
             }
         }
 
-        document.getElementById('search-input').addEventListener('input', renderLotsTable);
-        document.addEventListener('DOMContentLoaded', renderLotsTable);
+        searchInput.addEventListener('input', () => {
+            renderLotsTable();
+            renderSearchResults();
+        });
+        searchInput.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                hideSearchResults();
+                return;
+            }
+
+            if (event.key === 'ArrowDown' || event.key === 'Enter') {
+                const firstResult = searchResults.querySelector('[data-search-barcode]');
+                if (!firstResult) return;
+                event.preventDefault();
+                if (event.key === 'ArrowDown') firstResult.focus();
+                else firstResult.click();
+            }
+        });
+        document.addEventListener('click', event => {
+            if (!searchResults.contains(event.target) && event.target !== searchInput) {
+                hideSearchResults();
+            }
+        });
+        document.addEventListener('DOMContentLoaded', loadLots);
     </script>
 </body>
 </html>
