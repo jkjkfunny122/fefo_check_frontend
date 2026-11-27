@@ -12,17 +12,23 @@
     <!-- Navbar -->
     <nav class="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16 items-center">
-                <div class="flex items-center gap-2">
+            <div class="flex min-h-16 flex-wrap items-center justify-between py-2">
+                <div class="flex min-w-0 flex-1 items-center gap-2">
                     <span class="bg-indigo-600 text-white font-bold px-2.5 py-1 rounded-lg text-sm">FEFO</span>
-                    <span class="font-bold text-lg text-slate-900">ระบบจัดการ Lot & วันหมดอายุ</span>
+                    <span class="max-w-[12rem] truncate font-bold text-sm text-slate-900 sm:max-w-none sm:text-lg">ระบบจัดการ Lot & วันหมดอายุ</span>
                 </div>
-                <div class="flex items-center gap-1 sm:gap-2 text-sm font-medium">
-                    <a href="index.html" class="text-slate-600 hover:bg-slate-100 px-3 py-2 rounded-lg">ภาพรวม & แจ้งเตือน</a>
-                    <a href="receive.html" class="bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg">รับเข้า Lot สินค้า</a>
-                    <a href="pos.html" class="text-slate-600 hover:bg-slate-100 px-3 py-2 rounded-lg">จำลองการขาย (POS)</a>
+                <button id="mobile-menu-toggle" type="button" aria-controls="primary-navigation" aria-expanded="false"
+                    aria-label="เปิดเมนูนำทาง" data-mobile-menu-toggle
+                    class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 md:hidden">
+                    <span data-mobile-menu-icon aria-hidden="true">☰</span>
+                </button>
+                <div id="primary-navigation"
+                    class="hidden w-full flex-col gap-1 pt-2 text-sm font-medium md:flex md:w-auto md:flex-row md:items-center md:gap-1 md:pt-0">
+                    <a href="index.html" class="rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-100">ภาพรวม & แจ้งเตือน</a>
+                    <a href="receive.html" class="rounded-lg bg-indigo-50 px-3 py-2 text-indigo-700">รับเข้า Lot สินค้า</a>
+                    <a href="pos.html" class="rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-100">จำลองการขาย (POS)</a>
                     <button id="theme-toggle" type="button" aria-label="เปลี่ยนเป็นโหมดมืด" aria-pressed="false"
-                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        class="inline-flex h-10 w-10 self-start items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 md:self-auto">
                         <span data-theme-icon aria-hidden="true">☾</span>
                     </button>
                 </div>
@@ -48,8 +54,13 @@
 
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">ชื่อสินค้า *</label>
-                            <input type="text" id="name" required placeholder="เช่น นมสดพาสเจอร์ไรส์ 1000ml"
-                                class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                            <div class="relative">
+                                <input type="text" id="name" required autocomplete="off" placeholder="เช่น นมสดพาสเจอร์ไรส์ 1000ml"
+                                    role="combobox" aria-autocomplete="list" aria-controls="product-name-results" aria-expanded="false"
+                                    class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                                <div id="product-name-results" role="listbox"
+                                    class="absolute left-0 right-0 top-full z-20 mt-1 hidden max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"></div>
+                            </div>
                         </div>
 
                         <div class="grid grid-cols-2 gap-3">
@@ -118,6 +129,8 @@
                             <tbody id="lots-table-body" class="divide-y divide-slate-200 text-sm"></tbody>
                         </table>
                     </div>
+                    <nav id="lots-pagination" aria-label="เปลี่ยนหน้าประวัติรับ Lot"
+                        class="hidden items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm"></nav>
                 </div>
             </div>
 
@@ -133,10 +146,17 @@
         const itemsPerBoxInput = document.getElementById('itemsPerBox');
         const totalPreview = document.getElementById('total-preview');
         const receiveForm = document.getElementById('receive-form');
+        const productNameResults = document.getElementById('product-name-results');
         const searchInput = document.getElementById('search-input');
         const searchResults = document.getElementById('lot-search-results');
+        const LOTS_PAGE_SIZE = 10;
         let allLots = [];
+        let lotsPage = 1;
         let lotsLoaded = false;
+        let barcodeLookupTimer;
+        let barcodeLookupSequence = 0;
+        let productNameSearchTimer;
+        let productNameSearchSequence = 0;
 
         receiveDateInput.value = localDateString();
 
@@ -148,20 +168,141 @@
         boxesInput.addEventListener('input', updateTotalPreview);
         itemsPerBoxInput.addEventListener('input', updateTotalPreview);
 
-        barcodeInput.addEventListener('change', async () => {
+        function cancelPendingBarcodeLookup() {
+            window.clearTimeout(barcodeLookupTimer);
+            barcodeLookupSequence += 1;
+        }
+
+        function hideProductNameResults() {
+            productNameResults.classList.add('hidden');
+            nameInput.setAttribute('aria-expanded', 'false');
+        }
+
+        function applyProductSelection(product) {
+            nameInput.value = product.name;
+            barcodeInput.value = product.barcode;
+            itemsPerBoxInput.value = product.itemsPerBox;
+            updateTotalPreview();
+            hideProductNameResults();
+        }
+
+        function cancelProductNameSearch() {
+            window.clearTimeout(productNameSearchTimer);
+            productNameSearchSequence += 1;
+            hideProductNameResults();
+        }
+
+        async function searchProductsByName(query, sequence) {
+            try {
+                const result = await InventoryAPI.searchProducts(query, 1, 10);
+                if (sequence !== productNameSearchSequence || nameInput.value.trim() !== query) return;
+
+                const exactMatches = result.items.filter(
+                    product => product.name.toLowerCase() === query.toLowerCase(),
+                );
+                if (result.pagination.total === 1 && exactMatches.length === 1) {
+                    applyProductSelection(exactMatches[0]);
+                    clearAppError();
+                    return;
+                }
+
+                const matches = result.items.slice(0, 10);
+                if (matches.length === 0) {
+                    hideProductNameResults();
+                    clearAppError();
+                    return;
+                }
+
+                productNameResults.innerHTML = matches.map(product => `
+                    <button type="button" role="option" data-product-barcode="${escapeHtml(product.barcode)}"
+                        class="block w-full border-b border-slate-200 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50">
+                        <span class="block font-medium text-slate-900">${escapeHtml(product.name)}</span>
+                        <span class="block text-xs text-slate-500">Barcode: ${escapeHtml(product.barcode)}</span>
+                    </button>
+                `).join('');
+                productNameResults.classList.remove('hidden');
+                nameInput.setAttribute('aria-expanded', 'true');
+
+                productNameResults.querySelectorAll('[data-product-barcode]').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const product = matches.find(item => item.barcode === button.dataset.productBarcode);
+                        if (!product) return;
+                        applyProductSelection(product);
+                        clearAppError();
+                        nameInput.focus();
+                    });
+                });
+                clearAppError();
+            } catch (error) {
+                if (sequence === productNameSearchSequence && nameInput.value.trim() === query) {
+                    showAppError(error.message);
+                }
+            }
+        }
+
+        function scheduleProductNameSearch(delay = 250) {
+            window.clearTimeout(productNameSearchTimer);
+            cancelPendingBarcodeLookup();
+            const query = nameInput.value.trim();
+            const sequence = ++productNameSearchSequence;
+            if (!query) {
+                hideProductNameResults();
+                return;
+            }
+
+            productNameSearchTimer = window.setTimeout(
+                () => searchProductsByName(query, sequence),
+                delay,
+            );
+        }
+
+        function scheduleBarcodeLookup(delay = 250) {
+            window.clearTimeout(barcodeLookupTimer);
+            cancelProductNameSearch();
             const code = barcodeInput.value.trim();
             if (!code) return;
 
-            try {
-                const existing = await InventoryAPI.lookupProduct(code);
-                if (existing) {
-                    nameInput.value = existing.name;
-                    itemsPerBoxInput.value = existing.itemsPerBox;
-                    updateTotalPreview();
+            const sequence = ++barcodeLookupSequence;
+            const nameAtLookup = nameInput.value;
+            const itemsPerBoxAtLookup = itemsPerBoxInput.value;
+            barcodeLookupTimer = window.setTimeout(async () => {
+                try {
+                    const existing = await InventoryAPI.lookupProduct(code);
+                    if (sequence !== barcodeLookupSequence || barcodeInput.value.trim() !== code) return;
+
+                    if (existing) {
+                        if (nameInput.value === nameAtLookup) {
+                            nameInput.value = existing.name;
+                        }
+                        if (itemsPerBoxInput.value === itemsPerBoxAtLookup) {
+                            itemsPerBoxInput.value = existing.itemsPerBox;
+                            updateTotalPreview();
+                        }
+                    }
+                    clearAppError();
+                } catch (error) {
+                    if (sequence === barcodeLookupSequence && barcodeInput.value.trim() === code) {
+                        showAppError(error.message);
+                    }
                 }
-                clearAppError();
-            } catch (error) {
-                showAppError(error.message);
+            }, delay);
+        }
+
+        barcodeInput.addEventListener('input', () => scheduleBarcodeLookup());
+        barcodeInput.addEventListener('change', () => scheduleBarcodeLookup(0));
+        nameInput.addEventListener('input', () => scheduleProductNameSearch());
+        nameInput.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                hideProductNameResults();
+                return;
+            }
+
+            if (event.key === 'ArrowDown' || event.key === 'Enter') {
+                const firstResult = productNameResults.querySelector('[data-product-barcode]');
+                if (!firstResult) return;
+                event.preventDefault();
+                if (event.key === 'ArrowDown') firstResult.focus();
+                else firstResult.click();
             }
         });
 
@@ -180,6 +321,7 @@
                     itemsPerBox: Number(itemsPerBoxInput.value),
                 });
 
+                cancelPendingBarcodeLookup();
                 barcodeInput.value = '';
                 nameInput.value = '';
                 boxesInput.value = 1;
@@ -233,6 +375,7 @@
             searchResults.querySelectorAll('[data-search-barcode]').forEach(button => {
                 button.addEventListener('click', () => {
                     searchInput.value = button.dataset.searchBarcode;
+                    lotsPage = 1;
                     hideSearchResults();
                     renderLotsTable();
                     searchInput.focus();
@@ -245,12 +388,19 @@
             const tbody = document.getElementById('lots-table-body');
             if (!lotsLoaded) return;
 
-            const lots = matchingLots(keyword);
+            const matching = matchingLots(keyword);
+            const totalPages = Math.ceil(matching.length / LOTS_PAGE_SIZE);
+            lotsPage = Math.min(lotsPage, Math.max(totalPages, 1));
+            const lots = matching.slice(
+                (lotsPage - 1) * LOTS_PAGE_SIZE,
+                lotsPage * LOTS_PAGE_SIZE,
+            );
 
             tbody.innerHTML = '';
-            if (lots.length === 0) {
+            if (matching.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-slate-400">ไม่พบข้อมูล Lot สินค้า</td></tr>';
                 clearAppError();
+                renderPagination('lots-pagination', 1, totalPages, () => {});
                 return;
             }
 
@@ -297,6 +447,11 @@
                 });
             });
             clearAppError();
+            renderPagination('lots-pagination', lotsPage, totalPages, page => {
+                lotsPage = page;
+                hideSearchResults();
+                renderLotsTable();
+            });
         }
 
         async function loadLots() {
@@ -310,10 +465,12 @@
             } catch (error) {
                 showAppError(error.message);
                 tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-red-600">โหลดข้อมูลไม่สำเร็จ</td></tr>';
+                renderPagination('lots-pagination', 1, 0, () => {});
             }
         }
 
         searchInput.addEventListener('input', () => {
+            lotsPage = 1;
             renderLotsTable();
             renderSearchResults();
         });
@@ -332,11 +489,15 @@
             }
         });
         document.addEventListener('click', event => {
+            if (!productNameResults.contains(event.target) && event.target !== nameInput) {
+                hideProductNameResults();
+            }
             if (!searchResults.contains(event.target) && event.target !== searchInput) {
                 hideSearchResults();
             }
         });
         document.addEventListener('DOMContentLoaded', loadLots);
     </script>
+    <script src="/asset/js/navigation.js"></script>
 </body>
 </html>

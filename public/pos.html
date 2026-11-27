@@ -12,17 +12,23 @@
     <!-- Navbar -->
     <nav class="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16 items-center">
-                <div class="flex items-center gap-2">
+            <div class="flex min-h-16 flex-wrap items-center justify-between py-2">
+                <div class="flex min-w-0 flex-1 items-center gap-2">
                     <span class="bg-indigo-600 text-white font-bold px-2.5 py-1 rounded-lg text-sm">FEFO</span>
-                    <span class="font-bold text-lg text-slate-900">ระบบจัดการ Lot & วันหมดอายุ</span>
+                    <span class="max-w-[12rem] truncate font-bold text-sm text-slate-900 sm:max-w-none sm:text-lg">ระบบจัดการ Lot & วันหมดอายุ</span>
                 </div>
-                <div class="flex items-center gap-1 sm:gap-2 text-sm font-medium">
-                    <a href="index.html" class="text-slate-600 hover:bg-slate-100 px-3 py-2 rounded-lg">ภาพรวม & แจ้งเตือน</a>
-                    <a href="receive.html" class="text-slate-600 hover:bg-slate-100 px-3 py-2 rounded-lg">รับเข้า Lot สินค้า</a>
-                    <a href="pos.html" class="bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg">จำลองการขาย (POS)</a>
+                <button id="mobile-menu-toggle" type="button" aria-controls="primary-navigation" aria-expanded="false"
+                    aria-label="เปิดเมนูนำทาง" data-mobile-menu-toggle
+                    class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 md:hidden">
+                    <span data-mobile-menu-icon aria-hidden="true">☰</span>
+                </button>
+                <div id="primary-navigation"
+                    class="hidden w-full flex-col gap-1 pt-2 text-sm font-medium md:flex md:w-auto md:flex-row md:items-center md:gap-1 md:pt-0">
+                    <a href="index.html" class="rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-100">ภาพรวม & แจ้งเตือน</a>
+                    <a href="receive.html" class="rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-100">รับเข้า Lot สินค้า</a>
+                    <a href="pos.html" class="rounded-lg bg-indigo-50 px-3 py-2 text-indigo-700">จำลองการขาย (POS)</a>
                     <button id="theme-toggle" type="button" aria-label="เปลี่ยนเป็นโหมดมืด" aria-pressed="false"
-                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        class="inline-flex h-10 w-10 self-start items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 md:self-auto">
                         <span data-theme-icon aria-hidden="true">☾</span>
                     </button>
                 </div>
@@ -38,23 +44,18 @@
             <div class="lg:col-span-2 space-y-6">
                 <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                     <h2 class="text-lg font-bold text-slate-900 mb-3">สแกน Barcode เพื่อเพิ่มลงตะกร้าขาย</h2>
-                    <form id="scan-form" class="flex gap-2">
-                        <div class="relative flex-1">
-                            <input type="text" id="scan-barcode" autocomplete="off" autofocus placeholder="ค้นหาชื่อสินค้า หรือยิงบาร์โค้ด..."
-                                role="combobox" aria-autocomplete="list" aria-controls="product-search-results" aria-expanded="false"
-                                class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
-                            <div id="product-search-results" role="listbox"
-                                class="absolute left-0 right-0 top-full z-20 mt-1 hidden max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"></div>
-                        </div>
-                        <button type="submit" class="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-lg font-medium text-sm">
-                            เพิ่มรายการ
-                        </button>
-                    </form>
+                    <input type="text" id="scan-barcode" autocomplete="off" autofocus placeholder="ค้นหาชื่อสินค้า หรือยิงบาร์โค้ด..."
+                        role="combobox" aria-autocomplete="list" aria-controls="product-search-results" aria-expanded="false"
+                        class="w-full rounded-lg border border-slate-300 px-4 py-2.5 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <div id="product-search-results" role="listbox" aria-label="รายการสินค้าที่ค้นพบ"
+                        class="hidden mt-3 overflow-hidden rounded-lg border border-slate-200 divide-y divide-slate-200"></div>
                 </div>
 
                 <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                     <h3 class="font-bold text-slate-900 mb-4">เลือกสินค้าที่มีสต็อกพร้อมขาย (ไม่รวมล็อตที่หมดอายุ)</h3>
                     <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+                    <nav id="product-pagination" aria-label="เปลี่ยนหน้ารายการสินค้าพร้อมขาย"
+                        class="hidden items-center justify-between gap-3 border-t border-slate-200 pt-3 text-sm"></nav>
                 </div>
             </div>
 
@@ -95,6 +96,8 @@
         let cart = [];
         let sellableProducts = [];
         let checkoutInProgress = false;
+        const PRODUCT_PAGE_SIZE = 10;
+        let productPage = 1;
         const barcodeInput = document.getElementById('scan-barcode');
         const productSearchResults = document.getElementById('product-search-results');
 
@@ -103,13 +106,28 @@
             try {
                 sellableProducts = await InventoryAPI.getSellableProducts();
                 renderProductSearchResults();
-                if (sellableProducts.length === 0) {
-                    grid.innerHTML = '<p class="col-span-2 text-center text-slate-400 py-6">ไม่มีสินค้าพร้อมขายในสต็อก</p>';
-                    clearAppError();
-                    return;
-                }
+                renderProductGrid();
+                clearAppError();
+            } catch (error) {
+                showAppError(error.message);
+                grid.textContent = 'โหลดรายการสินค้าพร้อมขายไม่สำเร็จ';
+                renderPagination('product-pagination', 1, 0, () => {});
+            }
+        }
 
-                grid.innerHTML = sellableProducts.map(product => `
+        function renderProductGrid() {
+            const grid = document.getElementById('product-grid');
+            const totalPages = Math.ceil(sellableProducts.length / PRODUCT_PAGE_SIZE);
+            productPage = Math.min(productPage, Math.max(totalPages, 1));
+            const pageProducts = sellableProducts.slice(
+                (productPage - 1) * PRODUCT_PAGE_SIZE,
+                productPage * PRODUCT_PAGE_SIZE,
+            );
+
+            if (pageProducts.length === 0) {
+                grid.innerHTML = '<p class="col-span-2 text-center text-slate-400 py-6">ไม่มีสินค้าพร้อมขายในสต็อก</p>';
+            } else {
+                grid.innerHTML = pageProducts.map(product => `
                     <div class="border border-slate-200 rounded-lg p-4 hover:border-indigo-400 transition flex flex-col justify-between">
                         <div>
                             <div class="font-mono text-xs text-slate-400">${escapeHtml(product.barcode)}</div>
@@ -129,11 +147,12 @@
                 grid.querySelectorAll('[data-add-barcode]').forEach(button => {
                     button.addEventListener('click', () => addToCart(button.dataset.addBarcode));
                 });
-                clearAppError();
-            } catch (error) {
-                showAppError(error.message);
-                grid.textContent = 'โหลดรายการสินค้าพร้อมขายไม่สำเร็จ';
             }
+
+            renderPagination('product-pagination', productPage, totalPages, page => {
+                productPage = page;
+                renderProductGrid();
+            });
         }
 
         function hideProductSearchResults() {
@@ -159,7 +178,7 @@
 
             productSearchResults.innerHTML = matches.map(product => `
                 <button type="button" role="option" data-product-barcode="${escapeHtml(product.barcode)}"
-                    class="block w-full border-b border-slate-200 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50">
+                    class="block w-full px-3 py-2 text-left hover:bg-slate-50">
                     <span class="block font-medium text-slate-900">${escapeHtml(product.name)}</span>
                     <span class="block text-xs text-slate-500">Barcode: ${escapeHtml(product.barcode)} · พร้อมขาย ${product.availableQty} ชิ้น</span>
                 </button>
@@ -290,16 +309,6 @@
             }
         }
 
-        document.getElementById('scan-form').addEventListener('submit', (event) => {
-            event.preventDefault();
-            const barcode = barcodeInput.value.trim();
-            if (barcode) {
-                addToCart(barcode);
-                barcodeInput.value = '';
-                hideProductSearchResults();
-            }
-        });
-
         barcodeInput.addEventListener('input', renderProductSearchResults);
         barcodeInput.addEventListener('keydown', event => {
             if (event.key === 'Escape') {
@@ -325,5 +334,6 @@
             renderProducts();
         });
     </script>
+    <script src="/asset/js/navigation.js"></script>
 </body>
 </html>

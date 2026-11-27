@@ -101,6 +101,44 @@ function localDateString() {
     return `${year}-${month}-${day}`;
 }
 
+function renderPagination(containerId, currentPage, totalPages, onPageChange) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = '';
+    if (totalPages <= 1) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    container.classList.remove('hidden', 'justify-between');
+    container.classList.add('flex', 'flex-wrap', 'items-center', 'justify-center', 'gap-2');
+
+    const createButton = (text, page, label, active = false) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = active
+            ? 'rounded-lg border border-indigo-600 bg-indigo-600 px-3 py-1.5 font-semibold text-white'
+            : 'rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50';
+        button.textContent = text;
+        button.setAttribute('aria-label', label);
+        if (active) button.setAttribute('aria-current', 'page');
+        button.disabled = page < 1 || page > totalPages;
+        button.addEventListener('click', () => onPageChange(page));
+        return button;
+    };
+
+    container.appendChild(createButton('ก่อนหน้า', currentPage - 1, 'หน้าก่อนหน้า'));
+
+    const firstPage = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
+    const lastPage = Math.min(totalPages, firstPage + 4);
+    for (let page = firstPage; page <= lastPage; page += 1) {
+        container.appendChild(createButton(String(page), page, `ไปหน้าที่ ${page}`, page === currentPage));
+    }
+
+    container.appendChild(createButton('ถัดไป', currentPage + 1, 'หน้าถัดไป'));
+}
+
 window.InventoryAPI = {
     getLots: () => requestApi('/api/lots'),
     getLogs: () => requestApi('/api/logs'),
@@ -121,3 +159,4 @@ window.escapeHtml = escapeHtml;
 window.showAppError = showAppError;
 window.clearAppError = clearAppError;
 window.localDateString = localDateString;
+window.renderPagination = renderPagination;

@@ -217,18 +217,22 @@ router.post('/lots', async (request, response) => {
 
     const lotId = await withTransaction(async (connection) => {
         const [products] = await connection.execute(
-            'SELECT product_id FROM products WHERE barcode = ? FOR UPDATE',
+            'SELECT product_id, product_name FROM products WHERE barcode = ? FOR UPDATE',
             [barcode],
         );
 
         let productId;
         if (products.length > 0) {
+            if (products[0].product_name !== name) {
+                throw new ApiError(409, 'ชื่อสินค้าไม่ตรงกับข้อมูลในฐานข้อมูลสำหรับ Barcode นี้');
+            }
+
             productId = products[0].product_id;
             await connection.execute(`
                 UPDATE products
-                SET product_name = ?, items_per_box = ?, is_active = TRUE
+                SET items_per_box = ?, is_active = TRUE
                 WHERE product_id = ?
-            `, [name, itemsPerBox, productId]);
+            `, [itemsPerBox, productId]);
         } else {
             const [productResult] = await connection.execute(`
                 INSERT INTO products (barcode, product_name, items_per_box)

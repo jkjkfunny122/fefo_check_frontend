@@ -12,17 +12,23 @@
     <!-- Navbar -->
     <nav class="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16 items-center">
-                <div class="flex items-center gap-2">
+            <div class="flex min-h-16 flex-wrap items-center justify-between py-2">
+                <div class="flex min-w-0 flex-1 items-center gap-2">
                     <span class="bg-indigo-600 text-white font-bold px-2.5 py-1 rounded-lg text-sm">FEFO</span>
-                    <span class="font-bold text-lg text-slate-900">ระบบจัดการ Lot & วันหมดอายุ</span>
+                    <span class="max-w-[12rem] truncate font-bold text-sm text-slate-900 sm:max-w-none sm:text-lg">ระบบจัดการ Lot & วันหมดอายุ</span>
                 </div>
-                <div class="flex items-center gap-1 sm:gap-2 text-sm font-medium">
-                    <a href="index.html" class="bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg">ภาพรวม & แจ้งเตือน</a>
-                    <a href="receive.html" class="text-slate-600 hover:bg-slate-100 px-3 py-2 rounded-lg">รับเข้า Lot สินค้า</a>
-                    <a href="pos.html" class="text-slate-600 hover:bg-slate-100 px-3 py-2 rounded-lg">จำลองการขาย (POS)</a>
+                <button id="mobile-menu-toggle" type="button" aria-controls="primary-navigation" aria-expanded="false"
+                    aria-label="เปิดเมนูนำทาง" data-mobile-menu-toggle
+                    class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 md:hidden">
+                    <span data-mobile-menu-icon aria-hidden="true">☰</span>
+                </button>
+                <div id="primary-navigation"
+                    class="hidden w-full flex-col gap-1 pt-2 text-sm font-medium md:flex md:w-auto md:flex-row md:items-center md:gap-1 md:pt-0">
+                    <a href="index.html" class="rounded-lg bg-indigo-50 px-3 py-2 text-indigo-700">ภาพรวม & แจ้งเตือน</a>
+                    <a href="receive.html" class="rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-100">รับเข้า Lot สินค้า</a>
+                    <a href="pos.html" class="rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-100">จำลองการขาย (POS)</a>
                     <button id="theme-toggle" type="button" aria-label="เปลี่ยนเป็นโหมดมืด" aria-pressed="false"
-                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        class="inline-flex h-10 w-10 self-start items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 md:self-auto">
                         <span data-theme-icon aria-hidden="true">☾</span>
                     </button>
                 </div>
@@ -84,6 +90,8 @@
                     <tbody id="alert-table-body" class="divide-y divide-slate-200 text-sm"></tbody>
                 </table>
             </div>
+            <nav id="alert-pagination" aria-label="เปลี่ยนหน้ารายการวันหมดอายุ"
+                class="hidden items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm"></nav>
         </div>
 
         <!-- Recent Deduction Logs -->
@@ -97,25 +105,60 @@
 
     <script src="/asset/js/app.js"></script>
     <script>
-        async function renderDashboard() {
+        const ALERT_PAGE_SIZE = 10;
+        let alertLots = [];
+        let alertPage = 1;
+
+        function renderAlertTable() {
             const tbody = document.getElementById('alert-table-body');
+            const totalPages = Math.ceil(alertLots.length / ALERT_PAGE_SIZE);
+            alertPage = Math.min(alertPage, Math.max(totalPages, 1));
+            const pageLots = alertLots.slice(
+                (alertPage - 1) * ALERT_PAGE_SIZE,
+                alertPage * ALERT_PAGE_SIZE,
+            );
+
+            tbody.innerHTML = '';
+            if (pageLots.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-slate-400">ไม่มีสินค้าคงเหลือในระบบ</td></tr>';
+            }
+
+            pageLots.forEach(lot => {
+                const status = getExpiryStatus(lot.expiryDate);
+                const tr = document.createElement('tr');
+                tr.className = status.code === 'EXPIRED' ? 'bg-red-50/40' : 'hover:bg-slate-50';
+                tr.innerHTML = `
+                    <td class="py-3 px-4 whitespace-nowrap">
+                        <span class="px-2.5 py-1 rounded-full text-xs font-medium ${status.badgeClass}">${escapeHtml(status.label)}</span>
+                    </td>
+                    <td class="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap">${escapeHtml(lot.expiryDate)}</td>
+                    <td class="py-3 px-4 font-mono text-xs text-slate-600">${escapeHtml(lot.barcode)}</td>
+                    <td class="py-3 px-4 font-medium text-slate-900">${escapeHtml(lot.name)}</td>
+                    <td class="py-3 px-4 text-slate-500 whitespace-nowrap">${escapeHtml(lot.receiveDate)}</td>
+                    <td class="py-3 px-4 text-right text-slate-600 whitespace-nowrap">${escapeHtml(formatBoxAndPieces(lot.remainingQty, lot.itemsPerBox))} <span class="text-xs text-slate-400">(${lot.itemsPerBox}/ลัง)</span></td>
+                    <td class="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap">${lot.remainingQty} ชิ้น</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            renderPagination('alert-pagination', alertPage, totalPages, page => {
+                alertPage = page;
+                renderAlertTable();
+            });
+        }
+
+        async function renderDashboard() {
             const logsContainer = document.getElementById('recent-logs');
 
             try {
-                const lots = (await InventoryAPI.getLots())
+                alertLots = (await InventoryAPI.getLots())
                     .filter(lot => lot.remainingQty > 0)
                     .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
 
                 let sellableQty = 0;
                 let nearExpiryCount = 0;
                 let expiredCount = 0;
-                tbody.innerHTML = '';
-
-                if (lots.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-slate-400">ไม่มีสินค้าคงเหลือในระบบ</td></tr>';
-                }
-
-                lots.forEach(lot => {
+                alertLots.forEach(lot => {
                     const status = getExpiryStatus(lot.expiryDate);
                     if (status.code === 'EXPIRED') {
                         expiredCount++;
@@ -123,33 +166,19 @@
                         sellableQty += lot.remainingQty;
                         if (status.code === 'NEAR_EXPIRY') nearExpiryCount++;
                     }
-
-                    const tr = document.createElement('tr');
-                    tr.className = status.code === 'EXPIRED' ? 'bg-red-50/40' : 'hover:bg-slate-50';
-                    tr.innerHTML = `
-                        <td class="py-3 px-4 whitespace-nowrap">
-                            <span class="px-2.5 py-1 rounded-full text-xs font-medium ${status.badgeClass}">${escapeHtml(status.label)}</span>
-                        </td>
-                        <td class="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap">${escapeHtml(lot.expiryDate)}</td>
-                        <td class="py-3 px-4 font-mono text-xs text-slate-600">${escapeHtml(lot.barcode)}</td>
-                        <td class="py-3 px-4 font-medium text-slate-900">${escapeHtml(lot.name)}</td>
-                        <td class="py-3 px-4 text-slate-500 whitespace-nowrap">${escapeHtml(lot.receiveDate)}</td>
-                        <td class="py-3 px-4 text-right text-slate-600 whitespace-nowrap">${escapeHtml(formatBoxAndPieces(lot.remainingQty, lot.itemsPerBox))} <span class="text-xs text-slate-400">(${lot.itemsPerBox}/ลัง)</span></td>
-                        <td class="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap">${lot.remainingQty} ชิ้น</td>
-                    `;
-                    tbody.appendChild(tr);
                 });
 
-                document.getElementById('stat-active-lots').textContent = lots.length;
+                document.getElementById('stat-active-lots').textContent = alertLots.length;
                 document.getElementById('stat-sellable-qty').textContent = sellableQty.toLocaleString();
                 document.getElementById('stat-near-expiry').textContent = nearExpiryCount;
                 document.getElementById('stat-expired').textContent = expiredCount;
+                renderAlertTable();
 
                 const logs = await InventoryAPI.getLogs();
                 if (logs.length === 0) {
                     logsContainer.innerHTML = '<p class="text-slate-400 text-center py-4">ยังไม่มีประวัติการตัดสต็อก</p>';
                 } else {
-                    logsContainer.innerHTML = logs.map(log => `
+                    logsContainer.innerHTML = logs.slice(0, 4).map(log => `
                         <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 flex flex-col sm:flex-row sm:justify-between gap-2">
                             <div>
                                 <span class="font-semibold text-slate-900">[${escapeHtml(log.source)}] Order: ${escapeHtml(log.order_id)}</span>
@@ -170,5 +199,6 @@
 
         document.addEventListener('DOMContentLoaded', renderDashboard);
     </script>
+    <script src="/asset/js/navigation.js"></script>
 </body>
 </html>
