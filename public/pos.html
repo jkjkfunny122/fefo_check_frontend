@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>จำลองการขาย (POS) - StockLot FEFO</title>
+    <script src="/asset/js/theme.js"></script>
     <link href="/asset/css/output.css" rel="stylesheet">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
@@ -16,10 +17,14 @@
                     <span class="bg-indigo-600 text-white font-bold px-2.5 py-1 rounded-lg text-sm">FEFO</span>
                     <span class="font-bold text-lg text-slate-900">ระบบจัดการ Lot & วันหมดอายุ</span>
                 </div>
-                <div class="flex space-x-2 sm:space-x-4 text-sm font-medium">
+                <div class="flex items-center gap-1 sm:gap-2 text-sm font-medium">
                     <a href="index.html" class="text-slate-600 hover:bg-slate-100 px-3 py-2 rounded-lg">ภาพรวม & แจ้งเตือน</a>
                     <a href="receive.html" class="text-slate-600 hover:bg-slate-100 px-3 py-2 rounded-lg">รับเข้า Lot สินค้า</a>
                     <a href="pos.html" class="bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg">จำลองการขาย (POS)</a>
+                    <button id="theme-toggle" type="button" aria-label="เปลี่ยนเป็นโหมดมืด" aria-pressed="false"
+                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <span data-theme-icon aria-hidden="true">☾</span>
+                    </button>
                 </div>
             </div>
         </div>

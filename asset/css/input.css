@@ -1,3 +1,128 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+html.dark {
+    color-scheme: dark;
+}
+
+html.dark body,
+html.dark .bg-slate-50 {
+    background-color: #0f172a;
+}
+
+html.dark body,
+html.dark .text-slate-800,
+html.dark .text-slate-700,
+html.dark .text-slate-600 {
+    color: #cbd5e1;
+}
+
+html.dark .bg-white {
+    background-color: #1e293b;
+}
+
+html.dark .bg-slate-100 {
+    background-color: #334155;
+}
+
+html.dark .bg-slate-900 {
+    background-color: #334155;
+}
+
+html.dark .text-slate-900 {
+    color: #f1f5f9;
+}
+
+html.dark .text-slate-500,
+html.dark .text-slate-400 {
+    color: #94a3b8;
+}
+
+html.dark .border-slate-200 {
+    border-color: #334155;
+}
+
+html.dark .border-slate-300 {
+    border-color: #475569;
+}
+
+html.dark [class~="hover:bg-slate-50"]:hover {
+    background-color: #334155;
+}
+
+html.dark [class~="hover:bg-slate-100"]:hover,
+html.dark [class~="hover:bg-slate-200"]:hover {
+    background-color: #475569;
+}
+
+html.dark .bg-indigo-50 {
+    background-color: #1e1b4b;
+}
+
+html.dark [class~="bg-amber-50/30"],
+html.dark .bg-amber-50,
+html.dark .bg-amber-100 {
+    background-color: #422006;
+}
+
+html.dark [class~="bg-red-50/30"],
+html.dark [class~="bg-red-50/40"],
+html.dark .bg-red-50,
+html.dark .bg-red-100 {
+    background-color: #450a0a;
+}
+
+html.dark .bg-emerald-50,
+html.dark .bg-emerald-100 {
+    background-color: #052e16;
+}
+
+html.dark .text-indigo-900,
+html.dark .text-indigo-700 {
+    color: #c7d2fe;
+}
+
+html.dark .text-amber-800,
+html.dark .text-amber-700,
+html.dark .text-amber-600 {
+    color: #fcd34d;
+}
+
+html.dark .text-red-800,
+html.dark .text-red-700,
+html.dark .text-red-600 {
+    color: #fca5a5;
+}
+
+html.dark .text-emerald-800,
+html.dark .text-emerald-600 {
+    color: #6ee7b7;
+}
+
+html.dark .border-indigo-100 {
+    border-color: #3730a3;
+}
+
+html.dark .border-amber-200 {
+    border-color: #92400e;
+}
+
+html.dark .border-red-200,
+html.dark .border-red-300 {
+    border-color: #991b1b;
+}
+
+html.dark .border-emerald-200 {
+    border-color: #065f46;
+}
+
+html.dark input {
+    background-color: #1e293b;
+    border-color: #475569;
+    color: #f1f5f9;
+}
+
+html.dark input::placeholder {
+    color: #94a3b8;
+}
